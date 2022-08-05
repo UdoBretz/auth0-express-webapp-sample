@@ -6,6 +6,8 @@ const path = require('path');
 const router = require('./routes/index');
 const { auth } = require('express-openid-connect');
 
+const MemoryStore = require('memorystore')(auth);
+
 dotenv.load();
 
 const app = express();
@@ -19,11 +21,22 @@ app.use(express.json());
 
 const config = {
   authRequired: false,
-  auth0Logout: true
+  // auth0Logout: true,
+  idpLogout: true,
+  session: {
+    store: new MemoryStore({
+      checkPeriod: 24 * 60 * 1000,
+    }),
+  },
 };
 
 const port = process.env.PORT || 3000;
-if (!config.baseURL && !process.env.BASE_URL && process.env.PORT && process.env.NODE_ENV !== 'production') {
+if (
+  !config.baseURL &&
+  !process.env.BASE_URL &&
+  process.env.PORT &&
+  process.env.NODE_ENV !== 'production'
+) {
   config.baseURL = `http://localhost:${port}`;
 }
 
@@ -32,6 +45,12 @@ app.use(auth(config));
 // Middleware to make the `user` object available for all views
 app.use(function (req, res, next) {
   res.locals.user = req.oidc.user;
+  next();
+});
+
+// Middleware to make the `sessionStore` object available in the response object
+app.use(function (req, res, next) {
+  res.locals.sessionStore = config.session.store;
   next();
 });
 
@@ -49,11 +68,10 @@ app.use(function (err, req, res, next) {
   res.status(err.status || 500);
   res.render('error', {
     message: err.message,
-    error: process.env.NODE_ENV !== 'production' ? err : {}
+    error: process.env.NODE_ENV !== 'production' ? err : {},
   });
 });
 
-http.createServer(app)
-  .listen(port, () => {
-    console.log(`Listening on ${config.baseURL}`);
-  });
+http.createServer(app).listen(port, () => {
+  console.log(`Listening on ${config.baseURL}`);
+});
